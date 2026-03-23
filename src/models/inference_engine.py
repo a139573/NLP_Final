@@ -270,8 +270,31 @@ class InferenceEngine:
         self.predict(df, batch_size=batch_size)
 
         paths = []
-        for speaker in self.results_df["Speaker"].unique():
+        for speaker in self.results_df["Speaker"].dropna().unique():
+            if pd.isna(speaker) or str(speaker).strip().lower() == "nan":
+                continue
             paths.append(self.plot_speaker(speaker, save=True, show=False))
 
         print(f"\n🎉 Generated {len(paths)} radar chart(s) in {self.reports_dir}/")
         return self.results_df, paths
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run human-value classification and plot radars.")
+    parser.add_argument("--data", type=str, default="data/processed/parlamint_arguments_dataset_ALL_YEARS.jsonl",
+                        help="Path to the JSONL dataset.")
+    parser.add_argument("--batch-size", type=int, default=32,
+                        help="Batch size for inference.")
+    parser.add_argument("--weights", type=str, default="models/saved_weights/roberta_best.pt",
+                        help="Path to the model weights.")
+    parser.add_argument("--reports-dir", type=str, default="reports",
+                        help="Directory to save report images.")
+    
+    args = parser.parse_args()
+
+    engine = InferenceEngine(
+        weights_path=args.weights,
+        reports_dir=args.reports_dir
+    )
+    engine.run(args.data, batch_size=args.batch_size)

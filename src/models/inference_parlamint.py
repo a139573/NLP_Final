@@ -13,7 +13,7 @@ import pandas as pd
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-MODEL_DIR = "models/roberta-values-es"
+MODEL_DIR = "models/bert-values-es"
 INPUT_PATH = "data/processed/parlamint_arguments_dataset_ALL_YEARS.jsonl"
 OUTPUT_PATH = "data/processed/parlamint_arguments_with_values.jsonl"
 

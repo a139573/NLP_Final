@@ -20,10 +20,10 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from src.data.data_utils import BertDataset
 
 HF_CACHE = "/home/alumno/Desktop/datos/hf_cache/hub"
-MODEL_ID = "PlanTL-GOB-ES/roberta-base-bne"
+MODEL_ID = "dccuchile/bert-base-spanish-wwm-uncased"
 
-DATA_PATH = "data/interim/touche_es.csv"
-OUTPUT_DIR = "models/roberta-values-es"
+DATA_PATH = "data/interim/touche_es_clean.csv"
+OUTPUT_DIR = "models/bert-values-es"
 
 VALUE_LABELS = [
     "Self-direction: thought", "Self-direction: action", "Stimulation",
@@ -41,7 +41,15 @@ def load_splits():
     train = df[df["split"] == "train"].reset_index(drop=True)
     val = df[df["split"] == "val"].reset_index(drop=True)
     test = df[df["split"] == "test"].reset_index(drop=True)
-    return train, val, test
+    
+    # Fallback if checkpoint only contains train data currently
+    if len(val) == 0 and len(test) == 0:
+        val = train.sample(frac=0.1, random_state=42)
+        train = train.drop(val.index)
+        test = train.sample(frac=0.1, random_state=42)
+        train = train.drop(test.index)
+        
+    return train.reset_index(drop=True), val.reset_index(drop=True), test.reset_index(drop=True)
 
 
 def compute_metrics(eval_pred):
