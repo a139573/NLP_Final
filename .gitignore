@@ -1,0 +1,45 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.venv/
+hf_cache/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Data
+data/raw/
+data/interim/
+data/processed/
+data/external/
+!data/**/.gitkeep
+*.jsonl
+*.txt
+*.tsv
+*.csv
+
+# Models
+models/
+!models/.gitkeep
+
+# Reports & Logs
+reports/*.log
+reports/figures/*.png
+processed_interventions.log
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
