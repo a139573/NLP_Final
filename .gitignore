@@ -1,41 +1,55 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# ============================================
+# NLP Thesis Project – Production .gitignore
+# ============================================
 
-# Virtual environments
-.venv
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+*.whl
+
+# ---- Virtual Environments ----
 .venv/
+venv/
+ENV/
+
+# ---- HuggingFace Cache ----
 hf_cache/
 
-# Jupyter Notebooks
-.ipynb_checkpoints/
-
-# Data
+# ---- Data (all stages) ----
 data/raw/
 data/interim/
 data/processed/
+data/training/
 data/external/
 !data/**/.gitkeep
-*.jsonl
-*.txt
-*.tsv
-*.csv
 
-# Models
+# ---- Model Weights & Checkpoints ----
 models/
 !models/.gitkeep
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.ckpt
+best_roberta.zip
+tmp_trainer/
 
-# Reports & Logs
-reports/*.log
-reports/figures/*.png
-processed_interventions.log
-*.log
+# ---- Reports (generated outputs) ----
+reports/figures/
+reports/logs/
+!reports/**/.gitkeep
 
-# OS generated files
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- OS Artifacts ----
 .DS_Store
 .DS_Store?
 ._*
@@ -43,3 +57,14 @@ processed_interventions.log
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# ---- IDE ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+reports/*.log
+

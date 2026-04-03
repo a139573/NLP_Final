@@ -3,7 +3,7 @@ name = "final-project"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "ipykernel>=7.2.0",
     "ollama>=0.6.1",
@@ -14,4 +14,12 @@ dependencies = [
     "bitsandbytes>=0.48.0",
     "accelerate>=1.10.0",
     "scikit-learn>=1.7.0",
+    "optuna>=4.8.0",
+    "sentencepiece>=0.2.1",
+    "protobuf>=7.34.1",
+    "tiktoken>=0.12.0",
+    "matplotlib>=3.10.8",
+    "tree>=0.2.4",
+    "datasets>=4.8.4",
+    "optimum>=2.1.0",
 ]
