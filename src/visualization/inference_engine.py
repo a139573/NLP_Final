@@ -1,22 +1,46 @@
 """
 Unified Inference Engine for Political Rhetoric Classification.
+Optimized for RTX 6000 (Ada/Ampere 48GB VRAM).
 
 Automatically adapts to the Phase being tested based on the model's taxonomy:
 - 20 Labels (Phase 1/2): Renders triple-level Schwartz value radar charts.
 - 10 Labels (Phase 3): Renders a single political frame radar chart.
 """
 
-import os
+import argparse
 import json
+import os
 import re
 from math import pi
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+# Enable TensorFloat-32 (TF32) for massive matmul speedups on RTX 6000
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
+# ==========================================
+# Default paths per phase
+# ==========================================
+PHASE_DEFAULTS = {
+    1: {
+        "model_dir": "models/roberta-phase1-FINAL_PRODUCTION",
+        "data_path": "data/processed/phase1_parlamint_clean.jsonl",
+    },
+    2: {
+        "model_dir": "models/roberta-phase2-FINAL_PRODUCTION",
+        "data_path": "data/processed/phase2_parlamint_clean.jsonl",
+    },
+    3: {
+        "model_dir": "models/roberta-frames-optuna-phase3_PRODUCTION",
+        "data_path": "data/processed/phase3_parlamint_clean.jsonl", # Phase 3 clean data
+    },
+}
 
 # ==========================================
 # Schwartz Hierarchical Maps (Used only for Phase 1 & 2)
@@ -52,7 +76,7 @@ class InferenceEngine:
         self,
         model_dir: str,
         reports_dir: str = "reports/figures",
-        threshold: float = 0.85,
+        threshold: float = 0.50, # Set to 0.5 default for standard sigmoid thresholds
         max_len: int = 256,
         device: str | None = None,
     ):
@@ -64,7 +88,6 @@ class InferenceEngine:
 
         os.makedirs(self.reports_dir, exist_ok=True)
 
-        # Automatically load model, tokenizer, and taxonomy from the saved directory
         print(f"Loading model and taxonomy from {self.model_dir}...")
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_dir)
         self.model = AutoModelForSequenceClassification.from_pretrained(self.model_dir).to(self.device)
@@ -77,8 +100,6 @@ class InferenceEngine:
         print(f"✅ Model loaded successfully. Detected Phase Mode: {self.num_classes} classes.")
         self.results_df = None
 
-    # ---------- data ----------
-    # Removed @staticmethod so we can access self.num_classes
     def load_dataset(self, jsonl_path: str) -> pd.DataFrame:
         records = []
         with open(jsonl_path, "r", encoding="utf-8") as f:
@@ -88,25 +109,24 @@ class InferenceEngine:
                     records.append(json.loads(line))
         df = pd.DataFrame(records)
         
-        # Safe concatenation (handling NaNs and matching training format)
-        df["Conclusion"] = df["Conclusion"].fillna("").astype(str)
-        df["Stance"] = df["Stance"].fillna("").astype(str)
-        df["Premise"] = df["Premise"].fillna("").astype(str)
+        df["Conclusion"] = df.get("Conclusion", pd.Series([""] * len(df))).fillna("").astype(str)
+        df["Stance"] = df.get("Stance", pd.Series([""] * len(df))).fillna("").astype(str)
+        df["Premise"] = df.get("Premise", pd.Series([""] * len(df))).fillna("").astype(str)
         
-        # DYNAMIC FORMATTING BASED ON PHASE
-        if self.num_classes == 20:
-            # Phase 1 & 2 formatting
-            df["text_raw"] = df["Conclusion"] + " [SEP] " + df["Stance"] + " [SEP] " + df["Premise"]
+        # If the pipeline has already merged the text, use it; otherwise, format dynamically.
+        if "text" in df.columns:
+            df["text_raw"] = df["text"]
         else:
-            # Phase 3 formatting
-            df["text_raw"] = df["Conclusion"] + ". " + df["Stance"] + ". " + df["Premise"] + "."
+            if self.num_classes == 20:
+                df["text_raw"] = df["Conclusion"] + " [SEP] " + df["Stance"] + " [SEP] " + df["Premise"]
+            else:
+                df["text_raw"] = df["Conclusion"] + ". " + df["Stance"] + ". " + df["Premise"] + "."
         
         print(f"✅ Loaded {len(df)} arguments from {jsonl_path}")
         return df
 
-    # ---------- inference ----------
     @torch.inference_mode()
-    def predict(self, df: pd.DataFrame, batch_size: int = 32) -> pd.DataFrame:
+    def predict(self, df: pd.DataFrame, batch_size: int = 256) -> pd.DataFrame:
         all_probs = []
         texts = df["text_raw"].tolist()
 
@@ -120,12 +140,14 @@ class InferenceEngine:
                 return_tensors="pt",
             ).to(self.device)
             
-            logits = self.model(**enc).logits
-            all_probs.append(torch.sigmoid(logits).cpu().numpy())
+            # Use BFloat16 Autocast for massive speed boost on Ampere/Ada during inference
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                logits = self.model(**enc).logits
+                
+            all_probs.append(torch.sigmoid(logits).float().cpu().numpy())
 
         probs = np.vstack(all_probs)
         
-        # Map probabilities > threshold to their text labels dynamically
         values = [
             [self.id2label[i] for i in np.where(row >= self.threshold)[0]]
             for row in probs
@@ -138,18 +160,17 @@ class InferenceEngine:
         })
         return self.results_df
 
-    # ---------- aggregation ----------
     def _frequencies(self, values_series, mapping=None, specific_list=None):
         total = len(values_series)
         if total == 0:
             return {}
             
         freqs = {}
-        if mapping: # Used for Schwartz hierarchical mapping
+        if mapping:
             for cat, subs in mapping.items():
                 count = sum(1 for vals in values_series if any(v in vals for v in subs))
                 freqs[cat] = 100 * count / total
-        else: # Used for flat lists (Specific Schwartz or Phase 3 Frames)
+        else:
             for v in specific_list:
                 count = sum(1 for vals in values_series if v in vals)
                 freqs[v] = 100 * count / total
@@ -169,13 +190,11 @@ class InferenceEngine:
                 "specific": self._frequencies(vals, specific_list=self.labels_list),
             }
         else:
-            # Phase 3: Flat taxonomy
             return {
                 "n_arguments": len(sub),
                 "frames": self._frequencies(vals, specific_list=self.labels_list)
             }
 
-    # ---------- plotting ----------
     @staticmethod
     def _plot_radar(ax, data_dict, title, color, fill_color):
         cats = list(data_dict.keys())
@@ -191,7 +210,6 @@ class InferenceEngine:
         ax.set_theta_direction(-1)
         ax.set_xticks(angles[:-1])
         
-        # Clean formatting for labels
         formatted_cats = [c.replace(" ", "\n") if len(c)>15 else c for c in cats]
         ax.set_xticklabels(formatted_cats, fontsize=9, wrap=True)
         
@@ -200,7 +218,6 @@ class InferenceEngine:
         ax.set_yticklabels(["25%", "50%", "75%", "100%"], color="grey", size=8)
         ax.set_ylim(0, 100)
         
-        # Clean aesthetic palette
         ax.plot(angles, vals, color=color, linewidth=2)
         ax.fill(angles, vals, color=fill_color, alpha=0.35)
         ax.set_title(title, size=14, weight="bold", pad=20)
@@ -211,7 +228,6 @@ class InferenceEngine:
         slug = re.sub(r"[^\w]+", "_", speaker).strip("_").lower()
 
         if self.num_classes == 20:
-            # Phase 1/2: Triple Radar
             fig, axes = plt.subplots(1, 3, figsize=(22, 7), subplot_kw=dict(polar=True))
             fig.patch.set_facecolor('#F8F9FA')
             fig.suptitle(f"Rhetorical Profile (Schwartz): {speaker} (n={agg['n_arguments']})", fontsize=20, weight="bold", y=1.05)
@@ -221,12 +237,9 @@ class InferenceEngine:
             self._plot_radar(axes[2], agg["specific"], "Level 1: Specific", "#FF7F0E", "#FF7F0E")
             
         else:
-            # Phase 3: Single Radar
             fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True))
             fig.patch.set_facecolor('#F8F9FA')
             fig.suptitle(f"Ideological Framing Profile: {speaker}\n(n={agg['n_arguments']} arguments)", fontsize=18, weight="bold", y=1.05)
-            
-            # Using the requested green/teal aesthetic
             self._plot_radar(ax, agg["frames"], "Political Frames", color="#2CA02C", fill_color="#4CAF50")
 
         plt.tight_layout()
@@ -242,8 +255,8 @@ class InferenceEngine:
 
         return path
 
-    def run(self, jsonl_path: str, batch_size: int = 32):
-        df = self.load_dataset(jsonl_path) # <--- Make sure this looks like this
+    def run(self, jsonl_path: str, batch_size: int = 256):
+        df = self.load_dataset(jsonl_path)
         self.predict(df, batch_size=batch_size)
 
         paths = []
@@ -251,8 +264,6 @@ class InferenceEngine:
         for speaker in speakers:
             if str(speaker).lower() in ["nan", "unknown", ""]:
                 continue
-            
-            # Generate radar only if speaker has > 5 arguments to avoid noisy charts
             if len(self.results_df[self.results_df["Speaker"] == speaker]) > 5:
                 paths.append(self.plot_speaker(speaker, save=True, show=False))
 
@@ -261,22 +272,29 @@ class InferenceEngine:
 
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser(description="Run taxonomy-agnostic classification and plot radars.")
-    parser.add_argument("--data", type=str, default="data/processed/parlamint_framing_ALL_YEARS.jsonl")
-    
-    # --- UPDATE THIS LINE TO POINT TO THE _PRODUCTION FOLDER ---
-    parser.add_argument("--model-dir", type=str, default="models/roberta-frames-optuna-FINAL_PRODUCTION") 
-    
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument("--phase", type=int, choices=[1, 2, 3], required=True,
+                        help="Pipeline phase to evaluate.")
+    parser.add_argument("--data", type=str, default=None,
+                        help="Path to the JSONL data (overrides phase default).")
+    parser.add_argument("--model-dir", type=str, default=None,
+                        help="Path to the trained model (overrides phase default).")
+    parser.add_argument("--batch-size", type=int, default=256,
+                        help="Batch size for inference.")
+    parser.add_argument("--threshold", type=float, default=0.5,
+                        help="Sigmoid threshold for multi-label classification.")
     parser.add_argument("--reports-dir", type=str, default="reports/figures")
     
     args = parser.parse_args()
 
+    # Resolve paths
+    defaults = PHASE_DEFAULTS[args.phase]
+    model_dir = args.model_dir or defaults["model_dir"]
+    data_path = args.data or defaults["data_path"]
+
     engine = InferenceEngine(
-        model_dir=args.model_dir,
+        model_dir=model_dir,
         reports_dir=args.reports_dir,
         threshold=args.threshold
     )
-    engine.run(args.data, batch_size=args.batch_size)
+    engine.run(data_path, batch_size=args.batch_size)

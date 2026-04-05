@@ -13,8 +13,8 @@ import os
 import re
 
 # --- CONFIGURATION ---
-INPUT_PATH = "data/processed/parlamint_framing_ALL_YEARS.jsonl"
-OUTPUT_PATH = "data/processed/parlamint_clean.jsonl"
+INPUT_PATH = "data/processed/phase3_parlamint_framing.jsonl"
+OUTPUT_PATH = "data/processed/phase3_parlamint_clean.jsonl"
 
 # --- TYPO MAPPING ---
 LABEL_CORRECTIONS = {

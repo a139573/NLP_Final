@@ -31,8 +31,8 @@ from transformers import AutoTokenizer
 # ==========================================
 # CONFIGURATION
 # ==========================================
-DEFAULT_INPUT = "data/processed/parlamint_clean.jsonl"
-DEFAULT_OUTPUT = "data/training/hf_roberta_dataset"
+DEFAULT_INPUT = "data/processed/phase3_parlamint_clean.jsonl"
+DEFAULT_OUTPUT = "data/training/phase3_hf_roberta_dataset"
 DEFAULT_CLASSES = "data/training/taxonomia_clases.json"
 MODEL_ID = "bertin-project/bertin-roberta-base-spanish"
 DEFAULT_MAX_LEN = 256
