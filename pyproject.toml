@@ -22,4 +22,6 @@ dependencies = [
     "tree>=0.2.4",
     "datasets>=4.8.4",
     "optimum>=2.1.0",
+    "seaborn>=0.13.2",
+    "pdflatex>=0.1.3",
 ]
