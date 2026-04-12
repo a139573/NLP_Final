@@ -31,7 +31,6 @@ PARTY_COLORS = {
 # ==========================================
 # 1D GRADIENT WEIGHTS (Left vs. Right)
 # ==========================================
-# Positive values pull Right, Negative values pull Left
 IDEOLOGY_WEIGHTS = {
     "Libertad Económica y Mercado": 1.5,
     "Unidad Nacional y Soberanía": 1.0,
@@ -43,6 +42,18 @@ IDEOLOGY_WEIGHTS = {
     "Protección del Medio Ambiente": -0.8
 }
 
+# ==========================================
+# 1D GRADIENT: INSTITUTIONAL vs. ANTI-ESTABLISHMENT
+# ==========================================
+ESTABLISHMENT_WEIGHTS = {
+    "Ley, Orden y Seguridad Institucional": 1.5,
+    "Unidad Nacional y Soberanía": 1.0,
+    "Tradición y Valores Morales": 0.8,
+    "Crítica al Adversario (Polarización/Ataque personal)": -1.5,
+    "Regeneración y Lucha contra la Corrupción": -1.2,
+    "Democracia y Participación Ciudadana": -1.0
+}
+
 def get_speaker_party(df, speaker):
     parties = df[df['Speaker'] == speaker]['Party'].unique()
     for p in parties:
@@ -50,7 +61,7 @@ def get_speaker_party(df, speaker):
             return p
     return "Desconocido"
 
-def plot_ideological_gradient(df, output_path):
+def plot_1d_gradient(df, weights_dict, title, left_label, right_label, output_path):
     stats = []
     speakers = df['Speaker'].unique()
     
@@ -59,7 +70,8 @@ def plot_ideological_gradient(df, output_path):
         if len(sub) < 10: continue
             
         score = 0.0
-        for frame, weight in IDEOLOGY_WEIGHTS.items():
+        # FIXED: Now uses the weights_dict passed into the function
+        for frame, weight in weights_dict.items():
             pct = sum(1 for labels in sub['Predicted_Labels'] if frame in labels) / len(sub)
             score += (pct * 100) * weight
             
@@ -85,8 +97,8 @@ def plot_ideological_gradient(df, output_path):
                  fontsize=12, fontweight='bold', ha='center', va='center',
                  bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=2))
 
-    plt.title("Rhetorical Ideological Spectrum (Left to Right)", fontsize=16, fontweight='bold', pad=20)
-    plt.xlabel("← Left-Wing Rhetoric                      Right-Wing Rhetoric →", fontsize=12, fontweight='bold')
+    plt.title(f"{title}", fontsize=16, fontweight='bold', pad=20)
+    plt.xlabel(f"← {left_label}                      {right_label} →", fontsize=12, fontweight='bold')
     
     plt.yticks([])
     plt.ylim(-0.15, 0.15)
@@ -97,7 +109,7 @@ def plot_ideological_gradient(df, output_path):
     plt.tight_layout()
     plt.savefig(output_path, dpi=400, bbox_inches='tight')
     plt.close()
-    print(f"🌈 Saved 1D Ideological Gradient: {output_path}")
+    print(f"🌈 Saved 1D Gradient: {output_path}")
 
 def plot_ranked_frame(df, target_frame, output_path, title):
     stats = []
@@ -146,7 +158,25 @@ def main():
     
     os.makedirs(args.reports_dir, exist_ok=True)
     
-    plot_ideological_gradient(results_df, f"{args.reports_dir}/ideology_gradient.png")
+    # Graph 1: Left vs Right
+    plot_1d_gradient(
+        results_df, 
+        IDEOLOGY_WEIGHTS,
+        "Rhetorical Ideological Spectrum",
+        "← Left-Wing Rhetoric", 
+        "Right-Wing Rhetoric →",
+        f"{args.reports_dir}/ideology_gradient.png"
+    )
+
+    # Graph 2: Institutional vs Populist
+    plot_1d_gradient(
+        results_df, 
+        ESTABLISHMENT_WEIGHTS,
+        "Institutional vs. Anti-Establishment Rhetoric",
+        "← Populist / Anti-Establishment", 
+        "Institutional / Status Quo →",
+        f"{args.reports_dir}/establishment_gradient.png"
+    )
     
     plot_ranked_frame(
         results_df, 

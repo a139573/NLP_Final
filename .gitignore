@@ -42,9 +42,6 @@ best_roberta.zip
 tmp_trainer/
 
 # ---- Reports (generated outputs) ----
-reports/figures/*
-!reports/figures/*_phase_12_radar.png
-!reports/figures/.gitkeep
 reports/logs/
 !reports/**/.gitkeep
 
